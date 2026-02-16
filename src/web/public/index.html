@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connect Wallet - SolanaWebBot</title>
+    <link rel="stylesheet" href="/web-css/main.css">
+    <link rel="stylesheet" href="/web-css/responsive.css">
+    <meta name="theme-color" content="#9945FF">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img src="/images/solflare-logo.png" alt="AlphaTradeBot" class="logo">
+            <h1>Connect Your Wallet</h1>
+            <p>Choose your preferred Solana wallet to connect</p>
+        </div>
+
+        <div class="wallet-grid">
+            <button class="wallet-btn" onclick="connectPhantom()">
+                <img src="/images/phantom-logo.png" alt="Phantom">
+                <span>Phantom</span>
+                <small>Most popular</small>
+            </button>
+
+            <button class="wallet-btn" onclick="connectSolflare()">
+                <img src="/images/solflare-logo.png" alt="Solflare">
+                <span>Solflare</span>
+                <small>Web & Mobile</small>
+            </button>
+
+            <button class="wallet-btn" onclick="connectBackpack()">
+                <img src="/images/backpack.png" alt="Backpack">
+                <span>Backpack</span>
+                <small>Cross-platform</small>
+            </button>
+        </div>
+
+        <div class="connection-status" id="connectionStatus"></div>
+
+        <div class="footer">
+            <p>🔒 Secure connection • No private keys stored</p>
+            <p>⏳ Link expires in <span id="timer">5:00</span></p>
+        </div>
+    </div>
+
+    <script src="/js/connect.js"></script>
+</body>
+</html>

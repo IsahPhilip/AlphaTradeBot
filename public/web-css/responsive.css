@@ -1,0 +1,25 @@
+@media (max-width: 640px) {
+  body {
+    padding: 12px;
+  }
+
+  .container {
+    padding: 16px;
+    border-radius: 14px;
+  }
+
+  .wallet-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .wallet-btn {
+    min-height: 110px;
+    padding: 12px;
+  }
+
+  .logo {
+    width: 60px;
+    height: 60px;
+  }
+}
