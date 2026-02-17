@@ -25,6 +25,8 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const BOT_LAUNCH_TIMEOUT_MS = Number.parseInt(process.env.BOT_LAUNCH_TIMEOUT_MS || '20000', 10);
 const BOT_LAUNCH_RETRY_MS = Number.parseInt(process.env.BOT_LAUNCH_RETRY_MS || '10000', 10);
+const TELEGRAM_WEBHOOK_URL = (process.env.TELEGRAM_WEBHOOK_URL || '').trim();
+const ALLOW_LOCAL_POLLING = String(process.env.ALLOW_LOCAL_POLLING || '').toLowerCase() === 'true';
 
 const connectionCallbackSchema = z.object({
   connectionId: z.string().min(8),
@@ -117,6 +119,22 @@ function createBot() {
   return telegramBot;
 }
 
+function shouldUsePolling() {
+  if (!TELEGRAM_WEBHOOK_URL) {
+    return true;
+  }
+
+  if (ALLOW_LOCAL_POLLING) {
+    return true;
+  }
+
+  console.warn(
+    'TELEGRAM_WEBHOOK_URL is configured; skipping local polling to avoid overriding webhook mode. ' +
+      'Set ALLOW_LOCAL_POLLING=true to force polling.'
+  );
+  return false;
+}
+
 async function launchBotWithRetry() {
   if (!bot || isShuttingDown || isBotRunning || isBotLaunching) {
     return;
@@ -163,7 +181,7 @@ async function initializeServices() {
 
   bot = createBot();
 
-  if (bot) {
+  if (bot && shouldUsePolling()) {
     botLaunchPromise = launchBotWithRetry();
     await Promise.resolve(botLaunchPromise);
   }

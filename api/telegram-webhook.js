@@ -16,7 +16,8 @@ module.exports = async function telegramWebhookHandler(req, res) {
   }
 
   try {
-    await bootstrap({ withSolana: true });
+    // Keep webhook handling fast on serverless to avoid Telegram retries/timeouts.
+    await bootstrap({ withSolana: false });
 
     let update = req.body || {};
     if (typeof update === 'string') {
@@ -31,4 +32,3 @@ module.exports = async function telegramWebhookHandler(req, res) {
     return res.status(500).json({ success: false, error: 'Webhook processing failed' });
   }
 };
-
