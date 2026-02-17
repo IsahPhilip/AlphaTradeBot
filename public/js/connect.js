@@ -6,6 +6,29 @@ const chatId = urlParams.get('chatId');
 const callbackUrl = urlParams.get('callback');
 const connToken = urlParams.get('connToken');
 const expiresAtParam = urlParams.get('expiresAt');
+const parsedUserId = Number.parseInt(userId, 10);
+const parsedChatId = Number.parseInt(chatId, 10);
+
+function isValidCallbackUrl(url) {
+    try {
+        const parsed = new URL(url);
+        return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+    } catch {
+        return false;
+    }
+}
+
+function hasValidConnectionParams() {
+    return Boolean(
+        connectionId &&
+        Number.isInteger(parsedUserId) &&
+        parsedUserId > 0 &&
+        Number.isInteger(parsedChatId) &&
+        parsedChatId > 0 &&
+        connToken &&
+        isValidCallbackUrl(callbackUrl)
+    );
+}
 
 function getInitialTimeLeft() {
     if (expiresAtParam) {
@@ -24,6 +47,10 @@ const timerElement = document.getElementById('timer');
 
 if (timeLeft <= 0) {
     window.location.href = '/expired.html';
+}
+
+if (!hasValidConnectionParams()) {
+    showStatus('❌ Invalid or incomplete wallet link. Please reopen the latest link from Telegram.', 'error');
 }
 
 const timer = setInterval(() => {
@@ -109,6 +136,11 @@ async function connectBackpack() {
 }
 
 async function sendWalletToBackend(walletAddress, walletType) {
+    if (!hasValidConnectionParams()) {
+        showStatus('❌ Invalid or incomplete wallet link. Please reopen the latest link from Telegram.', 'error');
+        return;
+    }
+
     showStatus('Verifying connection...', 'info');
     
     try {
@@ -119,8 +151,8 @@ async function sendWalletToBackend(walletAddress, walletType) {
             },
             body: JSON.stringify({
                 connectionId,
-                userId: parseInt(userId),
-                chatId: parseInt(chatId),
+                userId: parsedUserId,
+                chatId: parsedChatId,
                 connToken,
                 walletAddress,
                 walletType,

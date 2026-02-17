@@ -34,7 +34,8 @@ const connectionCallbackSchema = z.object({
   walletType: z.string().optional(),
   publicKey: z.string().optional(),
   userId: z.number().int().positive(),
-  chatId: z.number().int().optional()
+  chatId: z.number().int().positive(),
+  connToken: z.string().min(16)
 });
 
 const createConnectionSchema = z.object({

@@ -156,14 +156,25 @@ class WalletConnectionService {
      */
     async initiateWalletConnection(userId, chatId) {
         try {
+            const normalizedUserId = Number.parseInt(userId, 10);
+            const normalizedChatId = Number.parseInt(chatId, 10);
+
+            if (!Number.isInteger(normalizedUserId) || normalizedUserId <= 0) {
+                throw new Error('Invalid userId');
+            }
+
+            if (!Number.isInteger(normalizedChatId) || normalizedChatId <= 0) {
+                throw new Error('Invalid chatId');
+            }
+
             // Generate unique connection ID
             const connectionId = crypto.randomBytes(16).toString('hex');
             
             // Create connection data
             const connectionData = {
                 connectionId,
-                userId: parseInt(userId),
-                chatId,
+                userId: normalizedUserId,
+                chatId: normalizedChatId,
                 createdAt: new Date(),
                 expiresAt: new Date(Date.now() + this.getConnectionTimeoutMs()),
                 status: 'pending'
@@ -171,8 +182,8 @@ class WalletConnectionService {
 
             const browserUrl = this.buildBrowserUrlWithExpiry(
                 connectionId,
-                userId,
-                chatId,
+                normalizedUserId,
+                normalizedChatId,
                 connectionData.expiresAt
             );
             
@@ -197,8 +208,13 @@ class WalletConnectionService {
     async handleWalletCallback(data) {
         try {
             const { connectionId, walletAddress, walletType, publicKey, userId, chatId, connToken } = data;
+            const normalizedConnectionId = String(connectionId || '').trim();
             const normalizedUserId = Number.parseInt(userId, 10);
             const normalizedChatId = Number.parseInt(chatId, 10);
+
+            if (!normalizedConnectionId) {
+                throw new Error('Invalid connectionId');
+            }
 
             if (!Number.isInteger(normalizedUserId) || normalizedUserId <= 0) {
                 throw new Error('Invalid userId');
@@ -209,16 +225,34 @@ class WalletConnectionService {
             }
             
             // Validate connection exists and is pending
-            const connection = await database.getPendingConnection(connectionId);
-            const isStatelessValidated = !connection
-                ? this.verifyConnectionToken(connToken, {
-                    connectionId,
-                    userId: normalizedUserId,
-                    chatId: normalizedChatId
-                })
-                : false;
-            
-            if (!connection && !isStatelessValidated) {
+            const connection = await database.getPendingConnection(normalizedConnectionId);
+            const expectedUserId = connection
+                ? Number.parseInt(connection.userId, 10)
+                : normalizedUserId;
+            const expectedChatId = connection
+                ? Number.parseInt(connection.chatId, 10)
+                : normalizedChatId;
+
+            if (connection) {
+                if (
+                    expectedUserId !== normalizedUserId ||
+                    expectedChatId !== normalizedChatId
+                ) {
+                    throw new Error('Connection payload mismatch');
+                }
+            }
+
+            const isTokenValid = this.verifyConnectionToken(connToken, {
+                connectionId: normalizedConnectionId,
+                userId: expectedUserId,
+                chatId: expectedChatId
+            });
+
+            if (!isTokenValid) {
+                throw new Error('Invalid connection token');
+            }
+
+            if (!connection) {
                 throw new Error('Connection not found or expired');
             }
 
@@ -236,16 +270,16 @@ class WalletConnectionService {
             }
             
             // Check if wallet already exists for this user
-            const existingWallets = await database.getUserWallets(normalizedUserId);
+            const existingWallets = await database.getUserWallets(expectedUserId);
             const existingWallet = existingWallets.find(w => w.address === walletAddress);
             
             if (existingWallet) {
                 // Wallet already connected, just activate it
-                await database.setActiveWallet(normalizedUserId, existingWallet.id);
+                await database.setActiveWallet(expectedUserId, existingWallet.id);
                 
                 // Complete connection
                 if (connection) {
-                    await database.completeConnection(connectionId, walletAddress);
+                    await database.completeConnection(normalizedConnectionId, walletAddress);
                 }
                 
                 return {
@@ -272,18 +306,18 @@ class WalletConnectionService {
                 transactions: []
             };
             
-            const wallet = await database.addWallet(normalizedUserId, walletData);
+            const wallet = await database.addWallet(expectedUserId, walletData);
             
             // Complete connection
             if (connection) {
-                await database.completeConnection(connectionId, walletAddress);
+                await database.completeConnection(normalizedConnectionId, walletAddress);
             }
             
             // Fetch recent transactions
             const recentTxs = await solana.getRecentTransactions(walletAddress, 5);
             if (recentTxs.length > 0) {
                 for (const tx of recentTxs) {
-                    await database.addTransaction(normalizedUserId, wallet.id, {
+                    await database.addTransaction(expectedUserId, wallet.id, {
                         type: tx.type,
                         amount: tx.amount,
                         signature: tx.signature,
@@ -447,17 +481,30 @@ class WalletConnectionService {
      */
     async createConnectionRequest(userId, chatId) {
         try {
+            const normalizedUserId = Number.parseInt(userId, 10);
+            const normalizedChatId = Number.parseInt(chatId, 10);
+
+            if (!Number.isInteger(normalizedUserId) || normalizedUserId <= 0) {
+                throw new Error('Invalid userId');
+            }
+
+            if (!Number.isInteger(normalizedChatId) || normalizedChatId <= 0) {
+                throw new Error('Invalid chatId');
+            }
+
             // Check if user already has pending connection
-            const existing = await database.getPendingConnectionByUser(userId);
+            const existing = await database.getPendingConnectionByUser(normalizedUserId);
             
             if (existing) {
+                const existingChatId = Number.parseInt(existing.chatId, 10);
+
                 // Return existing connection
                 return {
                     connectionId: existing.connectionId,
                     browserUrl: this.buildBrowserUrlWithExpiry(
                         existing.connectionId,
-                        userId,
-                        chatId,
+                        normalizedUserId,
+                        existingChatId,
                         existing.expiresAt
                     ),
                     expiresAt: existing.expiresAt,
@@ -466,7 +513,7 @@ class WalletConnectionService {
             }
             
             // Create new connection
-            return await this.initiateWalletConnection(userId, chatId);
+            return await this.initiateWalletConnection(normalizedUserId, normalizedChatId);
             
         } catch (error) {
             console.error('Error creating connection request:', error);
