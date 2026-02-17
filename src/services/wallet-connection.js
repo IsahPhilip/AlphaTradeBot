@@ -96,9 +96,13 @@ class WalletConnectionService {
     }
 
     verifyConnectionToken(token, expected) {
+        return Boolean(this.decodeAndVerifyConnectionToken(token, expected));
+    }
+
+    decodeAndVerifyConnectionToken(token, expected) {
         try {
             if (!token || typeof token !== 'string' || !token.includes('.')) {
-                return false;
+                return null;
             }
 
             const [encodedPayload, signature] = token.split('.', 2);
@@ -112,22 +116,23 @@ class WalletConnectionService {
                 signature.length !== expectedSignature.length ||
                 !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))
             ) {
-                return false;
+                return null;
             }
 
             const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
 
             if (Date.now() > Number(payload.exp || 0)) {
-                return false;
+                return null;
             }
 
-            return (
+            const matches =
                 String(payload.connectionId) === String(expected.connectionId) &&
                 Number.parseInt(payload.userId, 10) === Number.parseInt(expected.userId, 10) &&
-                Number.parseInt(payload.chatId, 10) === Number.parseInt(expected.chatId, 10)
-            );
+                Number.parseInt(payload.chatId, 10) === Number.parseInt(expected.chatId, 10);
+
+            return matches ? payload : null;
         } catch {
-            return false;
+            return null;
         }
     }
 
@@ -264,24 +269,20 @@ class WalletConnectionService {
                 }
             }
 
-            const isTokenValid = this.verifyConnectionToken(connToken, {
+            const tokenPayload = this.decodeAndVerifyConnectionToken(connToken, {
                 connectionId: normalizedConnectionId,
                 userId: expectedUserId,
                 chatId: expectedChatId
             });
 
-            if (!isTokenValid) {
+            if (!tokenPayload) {
                 throw new Error('Invalid connection token');
-            }
-
-            if (!connection) {
-                throw new Error('Connection not found or expired');
             }
 
             if (connection && connection.status !== 'pending') {
                 throw new Error('Connection already used');
             }
-            
+
             if (connection && new Date() > new Date(connection.expiresAt)) {
                 throw new Error('Connection link expired');
             }
@@ -295,7 +296,7 @@ class WalletConnectionService {
                 connectionId: normalizedConnectionId,
                 userId: expectedUserId,
                 chatId: expectedChatId,
-                expiresAt: connection.expiresAt
+                expiresAt: connection ? connection.expiresAt : new Date(Number(tokenPayload.exp))
             });
 
             if (!this.verifyWalletSignature(walletAddress, normalizedSignature, expectedChallenge)) {
