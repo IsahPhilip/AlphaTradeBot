@@ -7,6 +7,7 @@ class Database {
         this.client = null;
         this.db = null;
         this.memoryMode = false;
+        this.connectPromise = null;
         
         // In-memory storage for development
         this.users = new Map();
@@ -20,12 +21,63 @@ class Database {
      * Connect to MongoDB or use in-memory mode
      */
     async connect() {
+        if (this.connectPromise) {
+            return this.connectPromise;
+        }
+
+        this.connectPromise = this._connectInternal();
+
+        try {
+            await this.connectPromise;
+        } finally {
+            this.connectPromise = null;
+        }
+    }
+
+    _normalizeMongoUri(rawUri) {
+        if (typeof rawUri !== 'string') {
+            return '';
+        }
+
+        let uri = rawUri.trim();
+
+        // Vercel/env dashboards are often pasted with wrapping quotes.
+        if ((uri.startsWith('"') && uri.endsWith('"')) || (uri.startsWith("'") && uri.endsWith("'"))) {
+            uri = uri.slice(1, -1).trim();
+        }
+
+        return uri;
+    }
+
+    _formatMongoTarget(uri) {
+        try {
+            const parsed = new URL(uri);
+            return `${parsed.protocol}//${parsed.hostname}`;
+        } catch (_error) {
+            return 'invalid-uri';
+        }
+    }
+
+    _getMongoOptions() {
+        const family = parseInt(process.env.MONGODB_IP_FAMILY || '4', 10);
+
+        return {
+            serverSelectionTimeoutMS: 10000,
+            socketTimeoutMS: 45000,
+            tls: true,
+            appName: process.env.MONGODB_APP_NAME || 'AlphaTradeBot',
+            ...(family === 4 || family === 6 ? { family } : {})
+        };
+    }
+
+    async _connectInternal() {
         try {
             if (this.db && !this.memoryMode) {
                 return;
             }
 
-            const uri = process.env.MONGODB_URI;
+            const rawUri = process.env.MONGODB_URI;
+            const uri = this._normalizeMongoUri(rawUri);
             const dbName = process.env.MONGODB_DB || 'solana-web-bot';
             
             console.log('🔍 MongoDB connection attempt - URI:', uri ? 'Found' : 'Not found');
@@ -37,10 +89,15 @@ class Database {
                 return;
             }
 
-            this.client = new MongoClient(uri, {
-                serverSelectionTimeoutMS: 5000,
-                socketTimeoutMS: 45000
-            });
+            if (/\r|\n/.test(uri)) {
+                throw new Error('MONGODB_URI contains newline characters. Remove line breaks in Vercel env.');
+            }
+
+            const target = this._formatMongoTarget(uri);
+            const options = this._getMongoOptions();
+            console.log(`🔌 MongoDB target: ${target} (db=${dbName}, tls=true, family=${options.family || 'auto'})`);
+
+            this.client = new MongoClient(uri, options);
 
             await this.client.connect();
             this.db = this.client.db(dbName);
@@ -57,6 +114,9 @@ class Database {
 
         } catch (error) {
             console.error('❌ MongoDB connection error:', error.message);
+            if (error?.cause?.message) {
+                console.error('❌ MongoDB root cause:', error.cause.message);
+            }
             console.log('⚠️  Falling back to in-memory database');
             this.memoryMode = true;
             this.db = null;
