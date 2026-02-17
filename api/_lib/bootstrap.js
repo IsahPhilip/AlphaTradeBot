@@ -6,7 +6,8 @@ const solana = require('../../src/services/solana');
 async function bootstrap(options = {}) {
   const { withSolana = false } = options;
 
-  if (!database.db && !database.memoryMode) {
+  // Always attempt to connect to database on API calls to ensure we're not in memory mode
+  if (!database.db) {
     await database.connect();
   }
 

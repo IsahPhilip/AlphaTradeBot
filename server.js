@@ -354,8 +354,13 @@ async function stopServer(signal = 'shutdown') {
   await database.disconnect();
 }
 
-module.exports = {
-  app,
-  startServer,
-  stopServer
-};
+// Export Express app directly so platforms like Vercel can treat this file
+// as a valid function/server entrypoint. Keep lifecycle helpers as properties
+// for local runtime (`index.js`) compatibility.
+app.startServer = startServer;
+app.stopServer = stopServer;
+
+module.exports = app;
+module.exports.app = app;
+module.exports.startServer = startServer;
+module.exports.stopServer = stopServer;

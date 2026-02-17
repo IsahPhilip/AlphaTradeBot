@@ -23,6 +23,8 @@ class Database {
         try {
             const uri = process.env.MONGODB_URI;
             
+            console.log('🔍 MongoDB connection attempt - URI:', uri ? 'Found' : 'Not found');
+            
             if (!uri) {
                 console.log('⚠️  No MONGODB_URI found - using in-memory database');
                 console.log('📝 Data will be lost when bot restarts');
@@ -49,11 +51,14 @@ class Database {
             // Test connection
             await this.db.admin().ping();
             console.log('✅ Database ping successful');
+            this.memoryMode = false;
 
         } catch (error) {
             console.error('❌ MongoDB connection error:', error.message);
             console.log('⚠️  Falling back to in-memory database');
             this.memoryMode = true;
+            this.db = null;
+            this.client = null;
         }
     }
 
