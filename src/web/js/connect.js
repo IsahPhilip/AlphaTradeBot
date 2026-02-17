@@ -10,6 +10,8 @@ const challengeParam = urlParams.get('challenge');
 const parsedUserId = Number.parseInt(userId, 10);
 const parsedChatId = Number.parseInt(chatId, 10);
 const challengeMessage = decodeBase64UrlToUtf8(challengeParam);
+const parsedExpiresAtMs = Date.parse(expiresAtParam || '');
+const hasValidExpiresAt = !Number.isNaN(parsedExpiresAtMs);
 
 function decodeBase64UrlToUtf8(value) {
     try {
@@ -106,11 +108,13 @@ function hasValidConnectionParams() {
 }
 
 function getInitialTimeLeft() {
-    if (expiresAtParam) {
-        const expiresAt = Date.parse(expiresAtParam);
-        if (!Number.isNaN(expiresAt)) {
-            return Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+    if (hasValidExpiresAt) {
+        const seconds = Math.floor((parsedExpiresAtMs - Date.now()) / 1000);
+        // Avoid instant false-expired redirects from client clock skew.
+        if (seconds <= 0) {
+            return 300;
         }
+        return seconds;
     }
 
     return 300;
@@ -119,10 +123,6 @@ function getInitialTimeLeft() {
 // Timer
 let timeLeft = getInitialTimeLeft();
 const timerElement = document.getElementById('timer');
-
-if (timeLeft <= 0) {
-    window.location.href = '/expired.html';
-}
 
 if (!hasValidConnectionParams()) {
     showStatus('❌ Invalid or incomplete wallet link. Please reopen the latest link from Telegram.', 'error');
@@ -136,7 +136,11 @@ const timer = setInterval(() => {
     
     if (timeLeft <= 0) {
         clearInterval(timer);
-        window.location.href = '/expired.html';
+        // Redirect to expired page only when an explicit server expiry was supplied.
+        if (hasValidExpiresAt) {
+            window.location.href = '/expired.html';
+            return;
+        }
     }
 }, 1000);
 
