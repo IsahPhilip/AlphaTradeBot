@@ -21,7 +21,12 @@ class Database {
      */
     async connect() {
         try {
+            if (this.db && !this.memoryMode) {
+                return;
+            }
+
             const uri = process.env.MONGODB_URI;
+            const dbName = process.env.MONGODB_DB || 'solana-web-bot';
             
             console.log('🔍 MongoDB connection attempt - URI:', uri ? 'Found' : 'Not found');
             
@@ -34,14 +39,11 @@ class Database {
 
             this.client = new MongoClient(uri, {
                 serverSelectionTimeoutMS: 5000,
-                socketTimeoutMS: 45000,
-                tls: true,
-                tlsAllowInvalidCertificates: true,
-                tlsAllowInvalidHostnames: true
+                socketTimeoutMS: 45000
             });
 
             await this.client.connect();
-            this.db = this.client.db('solana-web-bot');
+            this.db = this.client.db(dbName);
             
             // Create indexes for better performance
             await this.createIndexes();
@@ -66,7 +68,7 @@ class Database {
      * Create database indexes
      */
     async createIndexes() {
-        if (this.memoryMode) return;
+        if (this.memoryMode || !this.db) return;
 
         try {
             const users = this.db.collection('users');
@@ -822,6 +824,10 @@ class Database {
      * Delete expired connections (called by cleanup job)
      */
     async deleteExpiredConnections() {
+        if (!this.db && !this.memoryMode) {
+            return;
+        }
+
         if (this.memoryMode) {
             const now = new Date();
             for (const [id, conn] of this.connections.entries()) {

@@ -492,6 +492,10 @@ class WalletConnectionService {
     startCleanupJob() {
         setInterval(async () => {
             try {
+                if (!database.memoryMode && !database.db) {
+                    return;
+                }
+
                 await database.deleteExpiredConnections();
                 
                 // Also clean memory map if in memory mode
