@@ -1019,7 +1019,13 @@ async function removeWallet(ctx, userId, walletId) {
  * Check connection status
  */
 async function checkConnection(ctx, userId) {
-    const status = await walletConnection.checkConnectionStatus(userId);
+    let status = await walletConnection.checkConnectionStatus(userId);
+
+    // Give the callback flow a brief moment to settle before declaring failure.
+    if (status.status === 'disconnected') {
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        status = await walletConnection.checkConnectionStatus(userId);
+    }
 
     if (status.status === 'pending') {
         const minutesLeft = Math.max(1, Math.ceil((status.timeLeft || 0) / 60));
@@ -1038,20 +1044,42 @@ async function checkConnection(ctx, userId) {
                 ])
             }
         );
+    } else if (status.status === 'connected') {
+        await ctx.reply(
+            '✅ *Wallet Connected!*\n\n' +
+            'Your wallet is now ready for trading.\n\n' +
+            'Access all features from the main menu.',
+            {
+                parse_mode: 'Markdown',
+                ...Markup.inlineKeyboard([
+                    [Markup.button.callback('👛 View Wallets', 'wallets')],
+                    [Markup.button.callback('🏠 Main Menu', 'main_menu')]
+                ])
+            }
+        );
+    } else if (status.status === 'error') {
+        await ctx.reply(
+            '❌ *Connection Check Failed*\n\n' +
+            'Unable to verify wallet status right now. Please try again.',
+            {
+                parse_mode: 'Markdown',
+                ...Markup.inlineKeyboard([
+                    [Markup.button.callback('🔄 Check Again', 'check_connection')],
+                    [Markup.button.callback('🔌 Connect Wallet', 'connect_wallet_browser')]
+                ])
+            }
+        );
     } else {
-        // Check if any wallet connected
-        const wallets = await database.getUserWallets(userId);
-        
-        if (wallets.length > 0) {
+        if (database.memoryMode) {
             await ctx.reply(
-                '✅ *Wallet Connected!*\n\n' +
-                'Your wallet is now ready for trading.\n\n' +
-                'Access all features from the main menu.',
+                '⚠️ *Connection state is not persistent right now.*\n\n' +
+                'The server is running in temporary memory mode, so wallet links may verify but not be saved.\n\n' +
+                'Please configure MongoDB in deployment and reconnect your wallet.',
                 {
                     parse_mode: 'Markdown',
                     ...Markup.inlineKeyboard([
-                        [Markup.button.callback('👛 View Wallets', 'wallets')],
-                        [Markup.button.callback('🏠 Main Menu', 'main_menu')]
+                        [Markup.button.callback('🔌 Connect Wallet', 'connect_wallet_browser')],
+                        [Markup.button.callback('🔄 Check Again', 'check_connection')]
                     ])
                 }
             );
