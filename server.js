@@ -23,6 +23,8 @@ const PORT = Number.parseInt(process.env.PORT || '3000', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const BOT_TOKEN = process.env.BOT_TOKEN;
+const BOT_LAUNCH_TIMEOUT_MS = Number.parseInt(process.env.BOT_LAUNCH_TIMEOUT_MS || '20000', 10);
+const BOT_LAUNCH_RETRY_MS = Number.parseInt(process.env.BOT_LAUNCH_RETRY_MS || '10000', 10);
 
 const connectionCallbackSchema = z.object({
   connectionId: z.string().min(8),
@@ -66,6 +68,8 @@ let httpServer = null;
 let isShuttingDown = false;
 let isBotRunning = false;
 let botLaunchPromise = null;
+let isBotLaunching = false;
+let botLaunchRetryTimer = null;
 
 function withTimeout(promise, timeoutMs, label) {
   let timeoutId;
@@ -78,6 +82,24 @@ function withTimeout(promise, timeoutMs, label) {
   return Promise.race([promise, timeoutPromise]).finally(() => {
     clearTimeout(timeoutId);
   });
+}
+
+function clearBotLaunchRetry() {
+  if (botLaunchRetryTimer) {
+    clearTimeout(botLaunchRetryTimer);
+    botLaunchRetryTimer = null;
+  }
+}
+
+function scheduleBotLaunchRetry() {
+  if (isShuttingDown || !bot || isBotRunning || botLaunchRetryTimer) {
+    return;
+  }
+
+  botLaunchRetryTimer = setTimeout(() => {
+    botLaunchRetryTimer = null;
+    botLaunchPromise = launchBotWithRetry();
+  }, BOT_LAUNCH_RETRY_MS);
 }
 
 function isBotConfigured() {
@@ -95,6 +117,40 @@ function createBot() {
   return telegramBot;
 }
 
+async function launchBotWithRetry() {
+  if (!bot || isShuttingDown || isBotRunning || isBotLaunching) {
+    return;
+  }
+
+  isBotLaunching = true;
+
+  try {
+    await withTimeout(bot.telegram.getMe(), 10000, 'Telegram getMe');
+    await withTimeout(bot.launch({ dropPendingUpdates: true }), BOT_LAUNCH_TIMEOUT_MS, 'Telegram bot launch');
+    isBotRunning = true;
+    console.log('Telegram bot launched.');
+  } catch (error) {
+    isBotRunning = false;
+    const message = error?.message || String(error);
+
+    if (message.includes('409')) {
+      console.warn('Telegram polling conflict (409). Another bot instance may already be running.');
+    } else {
+      console.warn(`Telegram bot launch failed: ${message}`);
+    }
+
+    try {
+      await withTimeout(Promise.resolve(bot.stop('launch-failed')), 5000, 'Telegram bot stop');
+    } catch (_stopError) {
+      // Ignore stop failures; launch retry still needs to continue.
+    }
+
+    scheduleBotLaunchRetry();
+  } finally {
+    isBotLaunching = false;
+  }
+}
+
 async function initializeServices() {
   await database.connect();
 
@@ -108,22 +164,8 @@ async function initializeServices() {
   bot = createBot();
 
   if (bot) {
-    isBotRunning = true;
-    botLaunchPromise = bot
-      .launch({ dropPendingUpdates: true })
-      .then(() => {
-        console.log('Telegram bot launched.');
-      })
-      .catch((error) => {
-        isBotRunning = false;
-        console.error('Telegram bot failed to launch:', error.message);
-      });
-
-    try {
-      await withTimeout(botLaunchPromise, 15000, 'Telegram bot launch');
-    } catch (error) {
-      console.warn('Telegram bot launch is still pending; continuing startup without blocking.');
-    }
+    botLaunchPromise = launchBotWithRetry();
+    await Promise.resolve(botLaunchPromise);
   }
 }
 
@@ -264,6 +306,7 @@ async function stopServer(signal = 'shutdown') {
 
   isShuttingDown = true;
   console.log(`Received ${signal}, shutting down gracefully...`);
+  clearBotLaunchRetry();
 
   if (bot) {
     try {
