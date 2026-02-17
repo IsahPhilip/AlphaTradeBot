@@ -3,14 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Wallet Connected</title>
-  <link rel="stylesheet" href="/css/style.css">
+  <title>Wallet Connected - AlphaTradeBot</title>
+  <link rel="stylesheet" href="/web-css/main.css">
+  <link rel="stylesheet" href="/web-css/responsive.css">
+  <meta name="theme-color" content="#9945FF">
 </head>
 <body>
   <div class="container status-page">
-    <h1>Wallet Connected</h1>
-    <p>Your wallet is now linked to AlphaTradeBot. You can return to Telegram and continue trading.</p>
-    <p><a href="tg://resolve?domain=AlphaTradinBot">Open Telegram Bot</a></p>
+    <div class="status-icon success">
+      <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="40" cy="40" r="38" stroke="rgba(20, 241, 149, 0.3)" stroke-width="2"/>
+        <circle cx="40" cy="40" r="30" fill="rgba(20, 241, 149, 0.15)"/>
+        <path d="M25 40L35 50L55 30" stroke="#14f195" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <h1>Wallet Connected Successfully!</h1>
+    <p>Your wallet has been securely linked to AlphaTradeBot. You're now ready to start trading on Solana.</p>
+    <div class="action-buttons">
+      <a href="tg://resolve?domain=AlphaTradinBot" class="btn btn-primary">Open Telegram Bot</a>
+    </div>
   </div>
 </body>
 </html>

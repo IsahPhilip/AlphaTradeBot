@@ -1,25 +1,63 @@
 @media (max-width: 640px) {
   body {
-    padding: 12px;
+    padding: 16px;
   }
 
   .container {
-    padding: 16px;
-    border-radius: 14px;
+    padding: 24px;
+    border-radius: 20px;
+  }
+
+  .header {
+    margin-bottom: 24px;
+  }
+
+  .logo {
+    width: 70px;
+    height: 70px;
+    padding: 10px;
+  }
+
+  h1 {
+    font-size: 1.8rem;
+  }
+
+  p {
+    font-size: 0.95rem;
   }
 
   .wallet-grid {
     grid-template-columns: 1fr;
-    gap: 10px;
+    gap: 12px;
   }
 
   .wallet-btn {
-    min-height: 110px;
+    min-height: 130px;
+    padding: 14px;
+  }
+
+  .action-buttons {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .container {
+    padding: 20px;
+  }
+
+  .wallet-btn {
+    min-height: 120px;
     padding: 12px;
   }
 
-  .logo {
-    width: 60px;
-    height: 60px;
+  .btn {
+    padding: 12px 24px;
+    font-size: 0.95rem;
   }
 }

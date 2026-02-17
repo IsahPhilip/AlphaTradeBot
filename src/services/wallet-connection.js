@@ -9,10 +9,18 @@ class WalletConnectionService {
         this.WEB_APP_URL = process.env.WEB_APP_URL || 'https://yourdomain.com/connect-wallet';
         this.TELEGRAM_WEB_APP_URL = process.env.TELEGRAM_WEB_APP_URL || this.WEB_APP_URL;
         this.BACKEND_URL = process.env.BACKEND_URL || '';
-        this.BOT_USERNAME = process.env.BOT_USERNAME || 'SolanaWebBot';
+        this.BOT_USERNAME = (process.env.BOT_USERNAME || 'SolanaWebBot').trim().replace(/^@/, '');
         
         // Start cleanup job
         this.startCleanupJob();
+    }
+
+    getConnectionTimeoutMs() {
+        const timeoutSeconds = Number.parseInt(process.env.CONNECTION_TIMEOUT, 10);
+        const normalizedSeconds = Number.isInteger(timeoutSeconds) && timeoutSeconds > 0
+            ? timeoutSeconds
+            : 300;
+        return normalizedSeconds * 1000;
     }
 
     isPublicHttpUrl(urlString) {
@@ -48,6 +56,77 @@ class WalletConnectionService {
     }
 
     buildBrowserUrl(connectionId, userId, chatId) {
+        return this.buildBrowserUrlWithExpiry(
+            connectionId,
+            userId,
+            chatId,
+            new Date(Date.now() + this.getConnectionTimeoutMs())
+        );
+    }
+
+    getConnectionTokenSecret() {
+        return (
+            process.env.SESSION_SECRET ||
+            process.env.JWT_SECRET ||
+            process.env.ENCRYPTION_KEY ||
+            'connection-dev-secret'
+        );
+    }
+
+    generateConnectionToken(connectionId, userId, chatId, expiresAt) {
+        const payload = {
+            connectionId: String(connectionId),
+            userId: Number.parseInt(userId, 10),
+            chatId: Number.parseInt(chatId, 10),
+            exp: new Date(expiresAt).getTime()
+        };
+
+        const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url');
+        const signature = crypto
+            .createHmac('sha256', this.getConnectionTokenSecret())
+            .update(encodedPayload)
+            .digest('base64url');
+
+        return `${encodedPayload}.${signature}`;
+    }
+
+    verifyConnectionToken(token, expected) {
+        try {
+            if (!token || typeof token !== 'string' || !token.includes('.')) {
+                return false;
+            }
+
+            const [encodedPayload, signature] = token.split('.', 2);
+            const expectedSignature = crypto
+                .createHmac('sha256', this.getConnectionTokenSecret())
+                .update(encodedPayload)
+                .digest('base64url');
+
+            if (
+                !signature ||
+                signature.length !== expectedSignature.length ||
+                !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))
+            ) {
+                return false;
+            }
+
+            const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
+
+            if (Date.now() > Number(payload.exp || 0)) {
+                return false;
+            }
+
+            return (
+                String(payload.connectionId) === String(expected.connectionId) &&
+                Number.parseInt(payload.userId, 10) === Number.parseInt(expected.userId, 10) &&
+                Number.parseInt(payload.chatId, 10) === Number.parseInt(expected.chatId, 10)
+            );
+        } catch {
+            return false;
+        }
+    }
+
+    buildBrowserUrlWithExpiry(connectionId, userId, chatId, expiresAt) {
         if (!this.isPublicHttpUrl(this.TELEGRAM_WEB_APP_URL)) {
             throw new Error(
                 'TELEGRAM_WEB_APP_URL (or WEB_APP_URL) must be a public HTTP(S) URL for Telegram buttons (localhost is not allowed).'
@@ -62,7 +141,12 @@ class WalletConnectionService {
         browserUrl.searchParams.set('userId', String(userId));
         browserUrl.searchParams.set('chatId', String(chatId));
         browserUrl.searchParams.set('callback', callbackUrl.toString());
+        browserUrl.searchParams.set('expiresAt', new Date(expiresAt).toISOString());
         browserUrl.searchParams.set('returnTo', `https://t.me/${this.BOT_USERNAME}`);
+        browserUrl.searchParams.set(
+            'connToken',
+            this.generateConnectionToken(connectionId, userId, chatId, expiresAt)
+        );
 
         return browserUrl.toString();
     }
@@ -81,11 +165,16 @@ class WalletConnectionService {
                 userId: parseInt(userId),
                 chatId,
                 createdAt: new Date(),
-                expiresAt: new Date(Date.now() + (5 * 60 * 1000)), // 5 minutes
+                expiresAt: new Date(Date.now() + this.getConnectionTimeoutMs()),
                 status: 'pending'
             };
 
-            const browserUrl = this.buildBrowserUrl(connectionId, userId, chatId);
+            const browserUrl = this.buildBrowserUrlWithExpiry(
+                connectionId,
+                userId,
+                chatId,
+                connectionData.expiresAt
+            );
             
             // Store in database
             await database.createPendingConnection(connectionId, connectionData);
@@ -107,20 +196,37 @@ class WalletConnectionService {
      */
     async handleWalletCallback(data) {
         try {
-            const { connectionId, walletAddress, walletType, publicKey, userId, chatId } = data;
+            const { connectionId, walletAddress, walletType, publicKey, userId, chatId, connToken } = data;
+            const normalizedUserId = Number.parseInt(userId, 10);
+            const normalizedChatId = Number.parseInt(chatId, 10);
+
+            if (!Number.isInteger(normalizedUserId) || normalizedUserId <= 0) {
+                throw new Error('Invalid userId');
+            }
+
+            if (!Number.isInteger(normalizedChatId) || normalizedChatId <= 0) {
+                throw new Error('Invalid chatId');
+            }
             
             // Validate connection exists and is pending
             const connection = await database.getPendingConnection(connectionId);
+            const isStatelessValidated = !connection
+                ? this.verifyConnectionToken(connToken, {
+                    connectionId,
+                    userId: normalizedUserId,
+                    chatId: normalizedChatId
+                })
+                : false;
             
-            if (!connection) {
+            if (!connection && !isStatelessValidated) {
                 throw new Error('Connection not found or expired');
             }
-            
-            if (connection.status !== 'pending') {
+
+            if (connection && connection.status !== 'pending') {
                 throw new Error('Connection already used');
             }
             
-            if (new Date() > new Date(connection.expiresAt)) {
+            if (connection && new Date() > new Date(connection.expiresAt)) {
                 throw new Error('Connection link expired');
             }
             
@@ -130,15 +236,17 @@ class WalletConnectionService {
             }
             
             // Check if wallet already exists for this user
-            const existingWallets = await database.getUserWallets(userId);
+            const existingWallets = await database.getUserWallets(normalizedUserId);
             const existingWallet = existingWallets.find(w => w.address === walletAddress);
             
             if (existingWallet) {
                 // Wallet already connected, just activate it
-                await database.setActiveWallet(userId, existingWallet.id);
+                await database.setActiveWallet(normalizedUserId, existingWallet.id);
                 
                 // Complete connection
-                await database.completeConnection(connectionId, walletAddress);
+                if (connection) {
+                    await database.completeConnection(connectionId, walletAddress);
+                }
                 
                 return {
                     success: true,
@@ -164,16 +272,18 @@ class WalletConnectionService {
                 transactions: []
             };
             
-            const wallet = await database.addWallet(userId, walletData);
+            const wallet = await database.addWallet(normalizedUserId, walletData);
             
             // Complete connection
-            await database.completeConnection(connectionId, walletAddress);
+            if (connection) {
+                await database.completeConnection(connectionId, walletAddress);
+            }
             
             // Fetch recent transactions
             const recentTxs = await solana.getRecentTransactions(walletAddress, 5);
             if (recentTxs.length > 0) {
                 for (const tx of recentTxs) {
-                    await database.addTransaction(userId, wallet.id, {
+                    await database.addTransaction(normalizedUserId, wallet.id, {
                         type: tx.type,
                         amount: tx.amount,
                         signature: tx.signature,
@@ -344,7 +454,12 @@ class WalletConnectionService {
                 // Return existing connection
                 return {
                     connectionId: existing.connectionId,
-                    browserUrl: this.buildBrowserUrl(existing.connectionId, userId, chatId),
+                    browserUrl: this.buildBrowserUrlWithExpiry(
+                        existing.connectionId,
+                        userId,
+                        chatId,
+                        existing.expiresAt
+                    ),
                     expiresAt: existing.expiresAt,
                     isNew: false
                 };

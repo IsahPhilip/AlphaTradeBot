@@ -3,13 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Connection Expired</title>
+  <title>Connection Expired - AlphaTradeBot</title>
   <link rel="stylesheet" href="/css/style.css">
+  <meta name="theme-color" content="#9945FF">
 </head>
 <body>
   <div class="container status-page">
+    <div class="status-icon warning">
+      <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="40" cy="40" r="38" stroke="rgba(245, 158, 11, 0.3)" stroke-width="2"/>
+        <circle cx="40" cy="40" r="30" fill="rgba(245, 158, 11, 0.15)"/>
+        <rect x="38" y="25" width="4" height="20" fill="#f59e0b" rx="2"/>
+        <circle cx="40" cy="50" r="3" fill="#f59e0b"/>
+      </svg>
+    </div>
     <h1>Connection Expired</h1>
-    <p>This wallet connection link expired. Return to Telegram and generate a fresh link.</p>
+    <p>This wallet connection link has expired. For security reasons, connection links are only valid for a limited time.</p>
+    <div class="action-buttons">
+      <a href="tg://resolve?domain=AlphaTradinBot" class="btn btn-primary">Generate Fresh Link</a>
+    </div>
   </div>
 </body>
 </html>

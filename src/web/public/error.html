@@ -3,13 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Connection Error</title>
-  <link rel="stylesheet" href="/css/style.css">
+  <title>Connection Error - AlphaTradeBot</title>
+  <link rel="stylesheet" href="/web-css/main.css">
+  <link rel="stylesheet" href="/web-css/responsive.css">
+  <meta name="theme-color" content="#9945FF">
 </head>
 <body>
   <div class="container status-page">
+    <div class="status-icon error">
+      <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="40" cy="40" r="38" stroke="rgba(239, 68, 68, 0.3)" stroke-width="2"/>
+        <circle cx="40" cy="40" r="30" fill="rgba(239, 68, 68, 0.15)"/>
+        <path d="M30 30L50 50" stroke="#ef4444" stroke-width="3" stroke-linecap="round"/>
+        <path d="M50 30L30 50" stroke="#ef4444" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+    </div>
     <h1>Connection Failed</h1>
-    <p>We could not complete wallet linking. Please retry from Telegram.</p>
+    <p>We couldn't complete the wallet linking process. Please try again from Telegram to establish a secure connection.</p>
+    <div class="action-buttons">
+      <a href="tg://resolve?domain=AlphaTradinBot" class="btn btn-primary">Try Again in Telegram</a>
+    </div>
   </div>
 </body>
 </html>

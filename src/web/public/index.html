@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Connect Wallet - SolanaWebBot</title>
+    <title>Connect Wallet - AlphaTradeBot</title>
     <link rel="stylesheet" href="/web-css/main.css">
     <link rel="stylesheet" href="/web-css/responsive.css">
     <meta name="theme-color" content="#9945FF">
@@ -11,26 +11,38 @@
 <body>
     <div class="container">
         <div class="header">
-            <img src="/images/solflare-logo.png" alt="AlphaTradeBot" class="logo">
+            <div class="logo-wrapper">
+                <img src="/images/solflare-logo.png" alt="AlphaTradeBot" class="logo">
+                <div class="logo-glow"></div>
+            </div>
             <h1>Connect Your Wallet</h1>
-            <p>Choose your preferred Solana wallet to connect</p>
+            <p>Choose your preferred Solana wallet to connect to AlphaTradeBot</p>
         </div>
 
         <div class="wallet-grid">
             <button class="wallet-btn" onclick="connectPhantom()">
-                <img src="/images/phantom-logo.png" alt="Phantom">
+                <div class="wallet-icon-wrapper">
+                    <img src="/images/phantom-logo.png" alt="Phantom">
+                    <div class="wallet-icon-glow"></div>
+                </div>
                 <span>Phantom</span>
                 <small>Most popular</small>
             </button>
 
             <button class="wallet-btn" onclick="connectSolflare()">
-                <img src="/images/solflare-logo.png" alt="Solflare">
+                <div class="wallet-icon-wrapper">
+                    <img src="/images/solflare-logo.png" alt="Solflare">
+                    <div class="wallet-icon-glow"></div>
+                </div>
                 <span>Solflare</span>
                 <small>Web & Mobile</small>
             </button>
 
             <button class="wallet-btn" onclick="connectBackpack()">
-                <img src="/images/backpack.png" alt="Backpack">
+                <div class="wallet-icon-wrapper">
+                    <img src="/images/backpack.png" alt="Backpack">
+                    <div class="wallet-icon-glow"></div>
+                </div>
                 <span>Backpack</span>
                 <small>Cross-platform</small>
             </button>
@@ -39,8 +51,20 @@
         <div class="connection-status" id="connectionStatus"></div>
 
         <div class="footer">
-            <p>🔒 Secure connection • No private keys stored</p>
-            <p>⏳ Link expires in <span id="timer">5:00</span></p>
+            <div class="security-badge">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="#14f195" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <circle cx="12" cy="11" r="3" stroke="#14f195" stroke-width="2"/>
+                </svg>
+                <span>Secure connection • No private keys stored</span>
+            </div>
+            <div class="timer">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="12" cy="12" r="10" stroke="#00c2ff" stroke-width="2"/>
+                    <path d="M12 6v6l4 2" stroke="#00c2ff" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                <span>Link expires in <span id="timer">5:00</span></span>
+            </div>
         </div>
     </div>
 

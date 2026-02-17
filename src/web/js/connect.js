@@ -4,10 +4,27 @@ const connectionId = urlParams.get('connectionId');
 const userId = urlParams.get('userId');
 const chatId = urlParams.get('chatId');
 const callbackUrl = urlParams.get('callback');
+const connToken = urlParams.get('connToken');
+const expiresAtParam = urlParams.get('expiresAt');
+
+function getInitialTimeLeft() {
+    if (expiresAtParam) {
+        const expiresAt = Date.parse(expiresAtParam);
+        if (!Number.isNaN(expiresAt)) {
+            return Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+        }
+    }
+
+    return 300;
+}
 
 // Timer
-let timeLeft = 300; // 5 minutes in seconds
+let timeLeft = getInitialTimeLeft();
 const timerElement = document.getElementById('timer');
+
+if (timeLeft <= 0) {
+    window.location.href = '/expired.html';
+}
 
 const timer = setInterval(() => {
     timeLeft--;
@@ -104,6 +121,7 @@ async function sendWalletToBackend(walletAddress, walletType) {
                 connectionId,
                 userId: parseInt(userId),
                 chatId: parseInt(chatId),
+                connToken,
                 walletAddress,
                 walletType,
                 publicKey: walletAddress
@@ -118,7 +136,13 @@ async function sendWalletToBackend(walletAddress, walletType) {
                 window.location.href = `/success.html?userId=${userId}`;
             }, 2000);
         } else {
-            showStatus('❌ ' + data.error, 'error');
+            const normalizedError = String(data.error || '');
+            if (normalizedError.includes('Connection not found or expired') || normalizedError.includes('Connection link expired')) {
+                showStatus('❌ Link expired. Please reopen the latest wallet link from Telegram.', 'error');
+                return;
+            }
+
+            showStatus('❌ ' + normalizedError, 'error');
         }
         
     } catch (error) {
