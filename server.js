@@ -23,8 +23,8 @@ const PORT = Number.parseInt(process.env.PORT || '3000', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const BOT_LAUNCH_TIMEOUT_MS = Number.parseInt(process.env.BOT_LAUNCH_TIMEOUT_MS || '20000', 10);
-const BOT_LAUNCH_RETRY_MS = Number.parseInt(process.env.BOT_LAUNCH_RETRY_MS || '10000', 10);
+const BOT_LAUNCH_TIMEOUT_MS = Number.parseInt(process.env.BOT_LAUNCH_TIMEOUT_MS || '60000', 10);
+const BOT_LAUNCH_RETRY_MS = Number.parseInt(process.env.BOT_LAUNCH_RETRY_MS || '15000', 10);
 const TELEGRAM_WEBHOOK_URL = (process.env.TELEGRAM_WEBHOOK_URL || '').trim();
 const ALLOW_LOCAL_POLLING = String(process.env.ALLOW_LOCAL_POLLING || '').toLowerCase() === 'true';
 
@@ -145,7 +145,7 @@ async function launchBotWithRetry() {
   isBotLaunching = true;
 
   try {
-    await withTimeout(bot.telegram.getMe(), 10000, 'Telegram getMe');
+    await withTimeout(bot.telegram.getMe(), 30000, 'Telegram getMe');
     await withTimeout(bot.launch({ dropPendingUpdates: true }), BOT_LAUNCH_TIMEOUT_MS, 'Telegram bot launch');
     isBotRunning = true;
     console.log('Telegram bot launched.');

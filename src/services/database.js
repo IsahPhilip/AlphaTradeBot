@@ -33,6 +33,9 @@ class Database {
             this.client = new MongoClient(uri, {
                 serverSelectionTimeoutMS: 5000,
                 socketTimeoutMS: 45000,
+                tls: true,
+                tlsAllowInvalidCertificates: true,
+                tlsAllowInvalidHostnames: true
             });
 
             await this.client.connect();
