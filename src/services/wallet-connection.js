@@ -1,7 +1,12 @@
 // services/wallet-connection.js
 const crypto = require('crypto');
+const bs58Module = require('bs58');
+const { ed25519 } = require('@noble/curves/ed25519');
+const { PublicKey } = require('@solana/web3.js');
 const database = require('./database');
 const solana = require('./solana');
+
+const base58 = bs58Module.default || bs58Module;
 
 class WalletConnectionService {
     constructor() {
@@ -144,6 +149,18 @@ class WalletConnectionService {
         browserUrl.searchParams.set('expiresAt', new Date(expiresAt).toISOString());
         browserUrl.searchParams.set('returnTo', `https://t.me/${this.BOT_USERNAME}`);
         browserUrl.searchParams.set(
+            'challenge',
+            Buffer.from(
+                this.buildWalletSignatureChallenge({
+                    connectionId,
+                    userId,
+                    chatId,
+                    expiresAt
+                }),
+                'utf8'
+            ).toString('base64url')
+        );
+        browserUrl.searchParams.set(
             'connToken',
             this.generateConnectionToken(connectionId, userId, chatId, expiresAt)
         );
@@ -207,10 +224,11 @@ class WalletConnectionService {
      */
     async handleWalletCallback(data) {
         try {
-            const { connectionId, walletAddress, walletType, publicKey, userId, chatId, connToken } = data;
+            const { connectionId, walletAddress, walletType, publicKey, userId, chatId, connToken, signature } = data;
             const normalizedConnectionId = String(connectionId || '').trim();
             const normalizedUserId = Number.parseInt(userId, 10);
             const normalizedChatId = Number.parseInt(chatId, 10);
+            const normalizedSignature = String(signature || '').trim();
 
             if (!normalizedConnectionId) {
                 throw new Error('Invalid connectionId');
@@ -222,6 +240,10 @@ class WalletConnectionService {
 
             if (!Number.isInteger(normalizedChatId) || normalizedChatId <= 0) {
                 throw new Error('Invalid chatId');
+            }
+
+            if (!normalizedSignature) {
+                throw new Error('Missing wallet signature');
             }
             
             // Validate connection exists and is pending
@@ -267,6 +289,17 @@ class WalletConnectionService {
             // Validate wallet address
             if (!solana.isValidAddress(walletAddress)) {
                 throw new Error('Invalid wallet address');
+            }
+
+            const expectedChallenge = this.buildWalletSignatureChallenge({
+                connectionId: normalizedConnectionId,
+                userId: expectedUserId,
+                chatId: expectedChatId,
+                expiresAt: connection.expiresAt
+            });
+
+            if (!this.verifyWalletSignature(walletAddress, normalizedSignature, expectedChallenge)) {
+                throw new Error('Invalid wallet signature');
             }
             
             // Check if wallet already exists for this user
@@ -566,6 +599,71 @@ class WalletConnectionService {
             verified: true,
             method: 'browser_connection'
         };
+    }
+
+    buildWalletSignatureChallenge({ connectionId, userId, chatId, expiresAt }) {
+        return [
+            'AlphaTradeBot Wallet Verification',
+            `Connection ID: ${String(connectionId)}`,
+            `User ID: ${Number.parseInt(userId, 10)}`,
+            `Chat ID: ${Number.parseInt(chatId, 10)}`,
+            `Expires At: ${new Date(expiresAt).toISOString()}`,
+            '',
+            'Sign this message to verify wallet ownership.'
+        ].join('\n');
+    }
+
+    decodeSignature(signature) {
+        const normalized = String(signature || '').trim();
+
+        if (!normalized) {
+            return null;
+        }
+
+        try {
+            const base64Decoded = Buffer.from(normalized, 'base64');
+            if (base64Decoded.length === 64) {
+                return base64Decoded;
+            }
+        } catch {
+            // Try next encoding.
+        }
+
+        try {
+            const base58Decoded = Buffer.from(base58.decode(normalized));
+            if (base58Decoded.length === 64) {
+                return base58Decoded;
+            }
+        } catch {
+            // Try next encoding.
+        }
+
+        try {
+            const hexDecoded = Buffer.from(normalized, 'hex');
+            if (hexDecoded.length === 64) {
+                return hexDecoded;
+            }
+        } catch {
+            return null;
+        }
+
+        return null;
+    }
+
+    verifyWalletSignature(walletAddress, signature, challenge) {
+        try {
+            const signatureBytes = this.decodeSignature(signature);
+            if (!signatureBytes) {
+                return false;
+            }
+
+            const publicKeyBytes = new PublicKey(walletAddress).toBytes();
+            const messageBytes = Buffer.from(challenge, 'utf8');
+
+            return ed25519.verify(signatureBytes, messageBytes, publicKeyBytes);
+        } catch {
+            return false;
+        }
     }
 
     /**

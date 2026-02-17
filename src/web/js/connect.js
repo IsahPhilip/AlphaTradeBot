@@ -6,8 +6,61 @@ const chatId = urlParams.get('chatId');
 const callbackUrl = urlParams.get('callback');
 const connToken = urlParams.get('connToken');
 const expiresAtParam = urlParams.get('expiresAt');
+const challengeParam = urlParams.get('challenge');
 const parsedUserId = Number.parseInt(userId, 10);
 const parsedChatId = Number.parseInt(chatId, 10);
+const challengeMessage = decodeBase64UrlToUtf8(challengeParam);
+
+function decodeBase64UrlToUtf8(value) {
+    try {
+        if (!value) return '';
+        const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+        const padLength = (4 - (normalized.length % 4)) % 4;
+        const padded = normalized + '='.repeat(padLength);
+        return decodeURIComponent(escape(window.atob(padded)));
+    } catch {
+        return '';
+    }
+}
+
+function bytesToBase64(bytes) {
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+}
+
+function normalizeSignatureBytes(result) {
+    if (!result) return null;
+
+    if (result.signature instanceof Uint8Array) return result.signature;
+    if (result instanceof Uint8Array) return result;
+    if (Array.isArray(result)) return Uint8Array.from(result);
+
+    return null;
+}
+
+async function signChallenge(provider, walletType) {
+    if (!challengeMessage) {
+        throw new Error('Missing signing challenge');
+    }
+
+    if (!provider || typeof provider.signMessage !== 'function') {
+        throw new Error(`${walletType} does not support message signing in this environment`);
+    }
+
+    const encoder = new TextEncoder();
+    const messageBytes = encoder.encode(challengeMessage);
+    const signatureResult = await provider.signMessage(messageBytes, 'utf8');
+    const signatureBytes = normalizeSignatureBytes(signatureResult);
+
+    if (!signatureBytes || signatureBytes.length === 0) {
+        throw new Error('Wallet did not return a signature');
+    }
+
+    return bytesToBase64(signatureBytes);
+}
 
 function isValidCallbackUrl(url) {
     try {
@@ -25,6 +78,7 @@ function hasValidConnectionParams() {
         parsedUserId > 0 &&
         Number.isInteger(parsedChatId) &&
         parsedChatId > 0 &&
+        challengeMessage &&
         connToken &&
         isValidCallbackUrl(callbackUrl)
     );
@@ -78,8 +132,9 @@ async function connectPhantom() {
         
         const response = await window.solana.connect();
         const publicKey = response.publicKey.toString();
-        
-        await sendWalletToBackend(publicKey, 'phantom');
+        const signature = await signChallenge(window.solana, 'Phantom');
+
+        await sendWalletToBackend(publicKey, 'phantom', signature);
         
     } catch (error) {
         console.error('Phantom connection error:', error);
@@ -104,7 +159,9 @@ async function connectSolflare() {
             throw new Error('Solflare did not return a public key');
         }
 
-        await sendWalletToBackend(publicKey, 'solflare');
+        const signature = await signChallenge(provider, 'Solflare');
+
+        await sendWalletToBackend(publicKey, 'solflare', signature);
     } catch (error) {
         console.error('Solflare connection error:', error);
         showStatus('Connection failed: ' + error.message, 'error');
@@ -128,14 +185,16 @@ async function connectBackpack() {
             throw new Error('Backpack did not return a public key');
         }
 
-        await sendWalletToBackend(publicKey, 'backpack');
+        const signature = await signChallenge(provider, 'Backpack');
+
+        await sendWalletToBackend(publicKey, 'backpack', signature);
     } catch (error) {
         console.error('Backpack connection error:', error);
         showStatus('Connection failed: ' + error.message, 'error');
     }
 }
 
-async function sendWalletToBackend(walletAddress, walletType) {
+async function sendWalletToBackend(walletAddress, walletType, signature) {
     if (!hasValidConnectionParams()) {
         showStatus('❌ Invalid or incomplete wallet link. Please reopen the latest link from Telegram.', 'error');
         return;
@@ -156,7 +215,8 @@ async function sendWalletToBackend(walletAddress, walletType) {
                 connToken,
                 walletAddress,
                 walletType,
-                publicKey: walletAddress
+                publicKey: walletAddress,
+                signature
             })
         });
         

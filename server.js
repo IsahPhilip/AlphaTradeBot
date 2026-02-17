@@ -35,7 +35,8 @@ const connectionCallbackSchema = z.object({
   publicKey: z.string().optional(),
   userId: z.number().int().positive(),
   chatId: z.number().int().positive(),
-  connToken: z.string().min(16)
+  connToken: z.string().min(16),
+  signature: z.string().min(16)
 });
 
 const createConnectionSchema = z.object({
