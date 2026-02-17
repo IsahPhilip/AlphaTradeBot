@@ -52,10 +52,31 @@ async function signChallenge(provider, walletType) {
 
     const encoder = new TextEncoder();
     const messageBytes = encoder.encode(challengeMessage);
-    const signatureResult = await provider.signMessage(messageBytes, 'utf8');
-    const signatureBytes = normalizeSignatureBytes(signatureResult);
+    const attempts = [
+        () => provider.signMessage(messageBytes),
+        () => provider.signMessage(messageBytes, 'utf8'),
+        () => provider.signMessage(messageBytes, { display: 'utf8' })
+    ];
+
+    let lastError = null;
+    let signatureBytes = null;
+
+    for (const attempt of attempts) {
+        try {
+            const signatureResult = await attempt();
+            signatureBytes = normalizeSignatureBytes(signatureResult);
+            if (signatureBytes && signatureBytes.length > 0) {
+                break;
+            }
+        } catch (error) {
+            lastError = error;
+        }
+    }
 
     if (!signatureBytes || signatureBytes.length === 0) {
+        if (lastError) {
+            throw lastError;
+        }
         throw new Error('Wallet did not return a signature');
     }
 
