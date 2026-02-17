@@ -8,6 +8,10 @@ class Database {
         this.db = null;
         this.memoryMode = false;
         this.connectPromise = null;
+        this.lastConnectionError = null;
+        this.lastConnectionAttemptAt = null;
+        this.lastConnectionSuccessAt = null;
+        this.lastConnectionTarget = null;
         
         // In-memory storage for development
         this.users = new Map();
@@ -79,6 +83,7 @@ class Database {
             const rawUri = process.env.MONGODB_URI;
             const uri = this._normalizeMongoUri(rawUri);
             const dbName = process.env.MONGODB_DB || 'solana-web-bot';
+            this.lastConnectionAttemptAt = new Date().toISOString();
             
             console.log('🔍 MongoDB connection attempt - URI:', uri ? 'Found' : 'Not found');
             
@@ -95,6 +100,7 @@ class Database {
 
             const target = this._formatMongoTarget(uri);
             const options = this._getMongoOptions();
+            this.lastConnectionTarget = target;
             console.log(`🔌 MongoDB target: ${target} (db=${dbName}, tls=true, family=${options.family || 'auto'})`);
 
             this.client = new MongoClient(uri, options);
@@ -111,6 +117,8 @@ class Database {
             await this.db.admin().ping();
             console.log('✅ Database ping successful');
             this.memoryMode = false;
+            this.lastConnectionError = null;
+            this.lastConnectionSuccessAt = new Date().toISOString();
 
         } catch (error) {
             console.error('❌ MongoDB connection error:', error.message);
@@ -121,6 +129,7 @@ class Database {
             this.memoryMode = true;
             this.db = null;
             this.client = null;
+            this.lastConnectionError = error?.cause?.message || error.message || 'Unknown MongoDB connection error';
         }
     }
 
@@ -1152,12 +1161,21 @@ class Database {
      */
     async healthCheck() {
         if (this.memoryMode) {
+            const hasMongoUri = Boolean(this._normalizeMongoUri(process.env.MONGODB_URI));
+            const isProduction = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+            const status = hasMongoUri && isProduction ? 'degraded' : 'healthy';
+
             return {
-                status: 'healthy',
+                status,
                 mode: 'memory',
                 users: this.users.size,
                 wallets: this.wallets.size,
-                trades: this.trades.size
+                trades: this.trades.size,
+                mongodbConfigured: hasMongoUri,
+                lastConnectionTarget: this.lastConnectionTarget,
+                lastConnectionAttemptAt: this.lastConnectionAttemptAt,
+                lastConnectionSuccessAt: this.lastConnectionSuccessAt,
+                lastMongoError: this.lastConnectionError
             };
         }
 
