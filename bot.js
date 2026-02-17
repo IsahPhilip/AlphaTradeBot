@@ -10,6 +10,7 @@ const walletConnection = require('./services/wallet-connection');
 // CONFIGURATION
 // ============================================
 const BOT_USERNAME = process.env.BOT_USERNAME || 'SolanaWebBot';
+const WEBHOOK_MODE = Boolean((process.env.TELEGRAM_WEBHOOK_URL || '').trim());
 
 const STATE_SEND_AMOUNT_PREFIX = 'awaiting_send_amount:';
 const STATE_SEND_ADDRESS_PREFIX = 'awaiting_send_address:';
@@ -25,40 +26,34 @@ const getMainMenuKeyboard = () => {
     return Markup.inlineKeyboard([
         [
             Markup.button.callback('📊 SOL Price', 'sol_price'),
+            Markup.button.callback('🛒 Buy & Sell', 'buy_sell'),
+            
+        ],
+        [
             Markup.button.callback('👛 My Wallets', 'wallets')
         ],
         [
-            Markup.button.callback('🛒 Buy & Sell', 'buy_sell'),
+            Markup.button.callback('👥 Copy Trades', 'copy_trades'),
             Markup.button.callback('⏰ Limit Orders', 'limit_orders')
         ],
         [
-            Markup.button.callback('👥 Copy Trades', 'copy_trades'),
-            Markup.button.callback('👤 Profile', 'profile')
-        ],
-        [
-            Markup.button.callback('📈 Trades', 'trades'),
+            Markup.button.callback('👤 Profile', 'profile'),
             Markup.button.callback('🎯 Referral System', 'referral')
         ],
         [
-            Markup.button.callback('💸 Cashback', 'cashback'),
+            Markup.button.callback('📈 Trades', 'trades'),
             Markup.button.callback('💎 Transfer SOL', 'transfer_sol')
         ],
         [
-            Markup.button.callback('⚙️ Settings', 'settings'),
-            Markup.button.callback('🛡️ Security', 'security')
-        ],
-        [
-            Markup.button.callback('🤖 Our Token', 'stbot_token'),
+            Markup.button.callback('💸 Cashback', 'cashback'),
             Markup.button.callback('🏦 Market Maker', 'market_maker')
         ],
         [
+            Markup.button.callback('⚙️ Settings', 'settings'),
+            Markup.button.callback('🛡️ Security', 'security'),
             Markup.button.callback('🔧 Backup Bots', 'backup_bots'),
             Markup.button.callback('🆘 Help', 'help_menu')
         ],
-        [
-            Markup.button.url('🌐 Website', 'https://solanatradingbot.com'),
-            Markup.button.url('🐦 Twitter', 'https://twitter.com/solanatradingbot')
-        ]
     ]);
 };
 
@@ -471,11 +466,6 @@ function setupBot(bot) {
                     await showCopyTrades(ctx, userId);
                     break;
                     
-                // Our token
-                case action === 'stbot_token':
-                    await showOurToken(ctx);
-                    break;
-                    
                 // Market maker
                 case action === 'market_maker':
                     await showMarketMaker(ctx);
@@ -598,6 +588,21 @@ function setupBot(bot) {
                 await handleSniperParameters(ctx, userId, text, state);
                 
             } else {
+                const maybePrivateKey = /^[1-9A-HJ-NP-Za-km-z]{80,120}$/.test(String(text || '').trim());
+
+                if (maybePrivateKey) {
+                    await ctx.replyWithMarkdown(
+                        '❌ *Import session expired*\n\n' +
+                        'Tap *Import with Private Key* again, then send the key in the next message.',
+                        {
+                            ...Markup.inlineKeyboard([
+                                [Markup.button.callback('📱 Import with Private Key', 'import_wallet')]
+                            ])
+                        }
+                    );
+                    return;
+                }
+
                 // Default response for unrecognized text
                 await ctx.reply(
                     'I\'m not sure how to respond to that. Please use the menu buttons below:',
@@ -804,6 +809,21 @@ async function handleConnectWallet(ctx, userId) {
  * Handle import wallet (private key)
  */
 async function handleImportWallet(ctx, userId) {
+    if (database.memoryMode && WEBHOOK_MODE) {
+        await ctx.replyWithMarkdown(
+            '⚠️ *Import unavailable right now*\n\n' +
+            'The bot is running in temporary memory mode on webhook deployment, so secure import steps cannot persist between messages.\n\n' +
+            'Please configure MongoDB for deployment, then try importing again.',
+            {
+                ...Markup.inlineKeyboard([
+                    [Markup.button.callback('🔄 Try Again', 'import_wallet')],
+                    [Markup.button.callback('👛 Wallets', 'wallets')]
+                ])
+            }
+        );
+        return;
+    }
+
     await database.updateUserState(userId, 'awaiting_private_key');
     
     const message = `
@@ -1642,45 +1662,6 @@ async function showSecurity(ctx, _userId) {
     });
 }
 
-/**
- * Show our token
- */
-async function showOurToken(ctx) {
-    const message = `
-🤖 *STBOT Token*
-
-The native token of Solana Web Bot
-
-*Tokenomics:*
-• Total Supply: 1,000,000,000 STBOT
-• Circulating: 250,000,000 STBOT
-• Current Price: $0.0012
-• Market Cap: $300,000
-
-*Benefits:*
-💰 50% fee discount when holding
-🎯 Early access to new features
-💸 Share of platform revenue
-🏆 Governance rights
-
-*How to Get:*
-• Buy on Raydium
-• Earn through trading
-• Referral rewards
-• Staking rewards
-
-*Price: $0.0012* 📈 +12% today
-    `;
-    
-    await ctx.replyWithMarkdown(message, {
-        ...Markup.inlineKeyboard([
-            [Markup.button.url('🔄 Buy on Raydium', 'https://raydium.io/swap')],
-            [Markup.button.callback('📊 Chart', 'stbot_chart')],
-            [Markup.button.callback('💰 Staking', 'stbot_staking')],
-            [Markup.button.callback('🔙 Back', 'main_menu')]
-        ])
-    });
-}
 
 /**
  * Show market maker
