@@ -14,6 +14,46 @@ const WEBHOOK_MODE = Boolean((process.env.TELEGRAM_WEBHOOK_URL || '').trim());
 
 const STATE_SEND_AMOUNT_PREFIX = 'awaiting_send_amount:';
 const STATE_SEND_ADDRESS_PREFIX = 'awaiting_send_address:';
+const PLANNED_FEATURE_ACTIONS = new Set([
+    'trading_stats',
+    'referral_link',
+    'view_referrals',
+    'referral_leaderboard',
+    'all_trades',
+    'performance',
+    'stats_sniper_v1',
+    'launch_sniper_v2',
+    'adv_config_v2',
+    'dashboard_v2',
+    'strategies_v2',
+    'snipe_pumpfun',
+    'scan_pumpfun',
+    'analytics_pumpfun',
+    'find_moonshot',
+    'analyze_moonshot',
+    'track_moonshot',
+    'view_launches',
+    'get_whitelist',
+    'vip_access',
+    'create_limit_buy',
+    'create_limit_sell',
+    'view_limit_orders',
+    'find_traders',
+    'copy_settings',
+    'copy_performance',
+    'edit_notifications',
+    'edit_trading',
+    'enable_2fa',
+    'active_sessions',
+    'add_liquidity',
+    'remove_liquidity',
+    'mm_stats',
+    'backup_status',
+    'switch_backup',
+    'faqs',
+    'cashback_history',
+    'tier_benefits'
+]);
 
 // ============================================
 // KEYBOARDS
@@ -363,6 +403,10 @@ function setupBot(bot) {
                 case action === 'sol_price':
                     await showSolPrice(ctx);
                     break;
+
+                case action === 'sol_chart':
+                    await showSolChart(ctx);
+                    break;
                     
                 // Wallets
                 case action === 'wallets':
@@ -403,6 +447,14 @@ function setupBot(bot) {
                 // Sniper tools
                 case action === 'sniper_v1':
                     await showSniperV1(ctx, userId);
+                    break;
+
+                case action === 'start_sniper_v1':
+                    await startSniperV1(ctx, userId);
+                    break;
+
+                case action === 'config_sniper_v1':
+                    await configureSniperV1(ctx, userId);
                     break;
                     
                 case action === 'sniper_v2':
@@ -506,6 +558,13 @@ function setupBot(bot) {
                     await removeWallet(ctx, userId, removeWalletId);
                     break;
                 }
+
+                // Backward-compatible remove action used by disconnect menu
+                case action.startsWith('confirm_remove_'): {
+                    const removeWalletId = action.replace('confirm_remove_', '');
+                    await removeWallet(ctx, userId, removeWalletId);
+                    break;
+                }
                     
                 // Handle send SOL
                 case action.startsWith('send_'): {
@@ -537,6 +596,14 @@ function setupBot(bot) {
                 // Handle connection check
                 case action === 'check_connection':
                     await checkConnection(ctx, userId);
+                    break;
+
+                case action.startsWith('copy_'):
+                    await handleCopyAction(ctx, userId, action);
+                    break;
+
+                case PLANNED_FEATURE_ACTIONS.has(action):
+                    await showPlannedFeatureNotice(ctx, action);
                     break;
                     
                 // Default handler
@@ -685,6 +752,32 @@ ${change >= 0 ? '🚀 Bullish momentum' : '📉 Correction expected'}
     } catch (error) {
         console.error('Error showing SOL price:', error);
         await ctx.reply('❌ Failed to fetch SOL price. Using cached data: $127.30');
+    }
+}
+
+async function showSolChart(ctx) {
+    try {
+        const price = await solana.getSOLPrice();
+        const change = await solana.getSOLChange();
+        const changeEmoji = change >= 0 ? '📈' : '📉';
+        const changeSign = change >= 0 ? '+' : '';
+
+        await ctx.replyWithMarkdown(
+            `📊 *SOL Detailed Chart*\n\n` +
+            `Price: *$${price.toFixed(2)}*\n` +
+            `24h: ${changeEmoji} ${changeSign}${change.toFixed(2)}%\n\n` +
+            `Open live chart:\nhttps://www.tradingview.com/symbols/SOLUSD/`,
+            {
+                ...Markup.inlineKeyboard([
+                    [Markup.button.callback('🔄 Refresh', 'sol_chart')],
+                    [Markup.button.callback('💎 SOL Price', 'sol_price')],
+                    [Markup.button.callback('🔙 Main Menu', 'main_menu')]
+                ])
+            }
+        );
+    } catch (error) {
+        console.error('Error showing SOL chart:', error);
+        await ctx.reply('❌ Failed to load detailed chart.');
     }
 }
 
@@ -1328,6 +1421,37 @@ ${activeWallet.name} (${activeWallet.balance?.toFixed(2) || 0} SOL)
     });
 }
 
+async function startSniperV1(ctx, userId) {
+    await database.updateUserState(userId, 'awaiting_sniper_v1');
+    await ctx.replyWithMarkdown(
+        '🚀 *Sniper V1 Started*\n\n' +
+        'Send the token address you want to snipe.\n\n' +
+        'You can type /cancel anytime to stop.',
+        {
+            ...Markup.inlineKeyboard([
+                [Markup.button.callback('❌ Cancel', 'buy_sell')]
+            ])
+        }
+    );
+}
+
+async function configureSniperV1(ctx, userId) {
+    await database.updateUserState(userId, 'awaiting_sniper_v1_config');
+    await ctx.replyWithMarkdown(
+        '⚙️ *Sniper V1 Configuration*\n\n' +
+        'Send your settings in one message:\n' +
+        '`token_address amount_sol slippage_percent`\n\n' +
+        'Example:\n' +
+        '`So11111111111111111111111111111111111111112 0.5 10`\n\n' +
+        'Use /cancel to abort.',
+        {
+            ...Markup.inlineKeyboard([
+                [Markup.button.callback('❌ Cancel', 'sniper_v1')]
+            ])
+        }
+    );
+}
+
 /**
  * Show sniper V2
  */
@@ -1809,6 +1933,40 @@ Watch our 2-minute guide
             [Markup.button.callback('🔙 Back', 'help_menu')]
         ])
     });
+}
+
+async function handleCopyAction(ctx, userId, action) {
+    if (action === 'copy_referral_link') {
+        const user = await database.getUser(userId);
+        const referralCode = user?.referralCode || generateReferralCode(userId);
+        const referralLink = `https://t.me/${BOT_USERNAME}?start=${referralCode}`;
+        await ctx.replyWithMarkdown(
+            `📋 *Referral Link*\n\n\`${referralLink}\``,
+            { ...Markup.inlineKeyboard([[Markup.button.callback('🔙 Back', 'referral')]]) }
+        );
+        return;
+    }
+
+    const value = action.replace('copy_', '').trim();
+    if (!value) {
+        await ctx.reply('❌ Nothing to copy.');
+        return;
+    }
+
+    await ctx.replyWithMarkdown(
+        `📋 *Copy this value:*\n\n\`${value}\``,
+        { ...Markup.inlineKeyboard([[Markup.button.callback('🔙 Back', 'wallets')]]) }
+    );
+}
+
+async function showPlannedFeatureNotice(ctx, action) {
+    const label = action.replace(/_/g, ' ');
+    await ctx.replyWithMarkdown(
+        `🛠️ *Feature not available yet*\n\n` +
+        `Selected action: \`${label}\`\n\n` +
+        `This button is wired and will be enabled in a future update.`,
+        { ...Markup.inlineKeyboard([[Markup.button.callback('🔙 Main Menu', 'main_menu')]]) }
+    );
 }
 
 /**
