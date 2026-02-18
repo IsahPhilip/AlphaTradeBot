@@ -1,7 +1,8 @@
 // services/solana.js
 const { Connection, PublicKey, Keypair, Transaction, SystemProgram, LAMPORTS_PER_SOL } = require('@solana/web3.js');
 const axios = require('axios');
-const bs58 = require('bs58');
+const bs58Module = require('bs58');
+const base58 = bs58Module.default || bs58Module;
 
 class SolanaService {
     constructor() {
@@ -202,7 +203,7 @@ class SolanaService {
         try {
             const keypair = Keypair.generate();
             const publicKey = keypair.publicKey.toString();
-            const privateKey = bs58.encode(keypair.secretKey);
+            const privateKey = base58.encode(keypair.secretKey);
             
             return {
                 publicKey,
@@ -220,7 +221,7 @@ class SolanaService {
      */
     async importWallet(privateKey) {
         try {
-            const keypair = Keypair.fromSecretKey(bs58.decode(privateKey));
+            const keypair = Keypair.fromSecretKey(base58.decode(privateKey));
             
             return {
                 publicKey: keypair.publicKey.toString(),
@@ -285,7 +286,7 @@ class SolanaService {
                 throw new Error('Invalid transfer parameters');
             }
             
-            const fromKeypair = Keypair.fromSecretKey(bs58.decode(fromPrivateKey));
+            const fromKeypair = Keypair.fromSecretKey(base58.decode(fromPrivateKey));
             const toPubkey = new PublicKey(toPublicKey);
             
             // Check balance
