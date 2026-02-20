@@ -210,7 +210,6 @@ function setupBot(bot) {
     bot.start(async (ctx) => {
         const userId = ctx.from.id;
         const username = ctx.from.username || 'Trader';
-        const safeUsername = escapeMarkdown(username);
         
         try {
             // Check if user exists, create if not
@@ -223,15 +222,6 @@ function setupBot(bot) {
                     referralCode: generateReferralCode(userId)
                 });
             }
-            
-            // Get SOL price
-            const solPrice = await solana.getSOLPrice().catch(() => 127.3);
-            const solChange = await solana.getSOLChange().catch(() => 2.5);
-            const changeEmoji = solChange >= 0 ? '📈' : '📉';
-            
-            // Get user stats
-            const wallets = await database.getUserWallets(userId);
-            const activeWallet = wallets.find(w => w.isActive);
             
             // Welcome message with ASCII art and branding
             const welcomeMessage = `
@@ -2291,10 +2281,6 @@ function getNextTierRequirement(user) {
     if (volume < 500) return 500 - volume;
     if (volume < 2000) return 2000 - volume;
     return 0;
-}
-
-function escapeMarkdown(input) {
-    return String(input || '').replace(/([_*[\]()~`>#+\-=|{}.!\\])/g, '\\$1');
 }
 
 function buildSendAmountState(walletId) {
